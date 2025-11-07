@@ -59,6 +59,9 @@ class ParkingManager:
         # O(1) 시간복잡도로 동을 검색할 수 있어 효율적
         self.dongs: Dict[str, 'Dong'] = {}
         
+        # 즐겨찾기 주차장 관리 (동이름:주차장이름 형태로 저장)
+        self.favorites: List[str] = []
+        
         # 로깅 시스템 초기화 - 디버깅과 모니터링을 위해 사용
         self.logger = logging.getLogger(__name__)
 
@@ -285,6 +288,171 @@ class ParkingManager:
         del self.dongs[dong_name]
         self.logger.info(f"동 '{dong_name}' 제거됨")
         return True
+
+    def add_favorite(self, dong_name: str, lot_name: str) -> bool:
+        """
+        즐겨찾기에 주차장을 추가합니다.
+        
+        Args:
+            dong_name: 동 이름
+            lot_name: 주차장 이름
+            
+        Returns:
+            bool: 추가 성공 시 True, 실패 시 False
+        """
+        if not dong_name or not lot_name:
+            self.logger.error("동 이름과 주차장 이름이 필요합니다")
+            return False
+            
+        # 주차장 존재 여부 확인
+        dong = self.get_dong(dong_name)
+        if not dong:
+            self.logger.error(f"동 '{dong_name}'을 찾을 수 없습니다")
+            return False
+            
+        lot = dong.get_lot_by_name(lot_name)
+        if not lot:
+            self.logger.error(f"주차장 '{lot_name}'을 찾을 수 없습니다")
+            return False
+            
+        # 즐겨찾기 키 생성 (동이름:주차장이름)
+        favorite_key = f"{dong_name}:{lot_name}"
+        
+        # 중복 확인
+        if favorite_key in self.favorites:
+            self.logger.warning(f"'{favorite_key}'이 이미 즐겨찾기에 있습니다")
+            return False
+            
+        # 즐겨찾기 추가
+        self.favorites.append(favorite_key)
+        self.logger.info(f"'{favorite_key}'이 즐겨찾기에 추가되었습니다")
+        return True
+
+    def remove_favorite(self, dong_name: str, lot_name: str) -> bool:
+        """
+        즐겨찾기에서 주차장을 제거합니다.
+        
+        Args:
+            dong_name: 동 이름
+            lot_name: 주차장 이름
+            
+        Returns:
+            bool: 제거 성공 시 True, 실패 시 False
+        """
+        if not dong_name or not lot_name:
+            self.logger.error("동 이름과 주차장 이름이 필요합니다")
+            return False
+            
+        # 즐겨찾기 키 생성
+        favorite_key = f"{dong_name}:{lot_name}"
+        
+        # 즐겨찾기에서 제거
+        if favorite_key in self.favorites:
+            self.favorites.remove(favorite_key)
+            self.logger.info(f"'{favorite_key}'이 즐겨찾기에서 제거되었습니다")
+            return True
+        else:
+            self.logger.warning(f"'{favorite_key}'이 즐겨찾기에 없습니다")
+            return False
+
+    def get_favorites(self) -> List[dict]:
+        """
+        즐겨찾기 주차장 목록을 반환합니다.
+        
+        Returns:
+            List[dict]: 즐겨찾기 주차장 정보 리스트
+        """
+        favorites_info = []
+        
+        for favorite_key in self.favorites:
+            try:
+                dong_name, lot_name = favorite_key.split(":", 1)
+                dong = self.get_dong(dong_name)
+                
+                if dong:
+                    lot = dong.get_lot_by_name(lot_name)
+                    if lot:
+                        # 주차장 정보 수집
+                        lot_info = {
+                            'dong_name': dong_name,
+                            'lot_name': lot_name,
+                            'location': lot.location_info,
+                            'current_cars': lot.current_cars,
+                            'total_spaces': lot.total_spaces,
+                            'occupancy_rate': lot.get_occupancy_rate(),
+                            'available_spaces': lot.get_available_spaces(),
+                            'is_full': lot.is_full(),
+                            'is_empty': lot.is_empty()
+                        }
+                        favorites_info.append(lot_info)
+                    else:
+                        # 주차장이 삭제된 경우 즐겨찾기에서 제거
+                        self.favorites.remove(favorite_key)
+                        self.logger.warning(f"삭제된 주차장 '{favorite_key}'을 즐겨찾기에서 제거했습니다")
+                else:
+                    # 동이 삭제된 경우 즐겨찾기에서 제거
+                    self.favorites.remove(favorite_key)
+                    self.logger.warning(f"삭제된 동의 주차장 '{favorite_key}'을 즐겨찾기에서 제거했습니다")
+                    
+            except Exception as e:
+                self.logger.error(f"즐겨찾기 정보 처리 중 오류: {e}")
+                continue
+                
+        return favorites_info
+
+    def is_favorite(self, dong_name: str, lot_name: str) -> bool:
+        """
+        주차장이 즐겨찾기에 있는지 확인합니다.
+        
+        Args:
+            dong_name: 동 이름
+            lot_name: 주차장 이름
+            
+        Returns:
+            bool: 즐겨찾기에 있으면 True, 없으면 False
+        """
+        if not dong_name or not lot_name:
+            return False
+            
+        favorite_key = f"{dong_name}:{lot_name}"
+        return favorite_key in self.favorites
+
+    def get_lots_by_type(self, parking_type: str) -> List[dict]:
+        """
+        특정 유형의 주차장 목록을 반환합니다.
+        
+        Args:
+            parking_type: 주차장 유형 ("무료" 또는 "유료")
+            
+        Returns:
+            List[dict]: 해당 유형의 주차장 정보 리스트
+        """
+        if parking_type not in ["무료", "유료"]:
+            self.logger.error(f"잘못된 주차장 유형: {parking_type}")
+            return []
+            
+        filtered_lots = []
+        
+        for dong in self.dongs.values():
+            for lot in dong.parking_lots:
+                if lot.parking_type == parking_type:
+                    lot_info = {
+                        'dong_name': dong.name,
+                        'lot_name': lot.name,
+                        'location': lot.location_info,
+                        'current_cars': lot.current_cars,
+                        'total_spaces': lot.total_spaces,
+                        'occupancy_rate': lot.get_occupancy_rate(),
+                        'available_spaces': lot.get_available_spaces(),
+                        'is_full': lot.is_full(),
+                        'is_empty': lot.is_empty(),
+                        'parking_type': lot.parking_type,
+                        'price_info': lot.price_info
+                    }
+                    filtered_lots.append(lot_info)
+        
+        self.logger.info(f"'{parking_type}' 유형 주차장 {len(filtered_lots)}개 조회됨")
+        return filtered_lots
 
 class Dong:
     """
@@ -726,7 +894,7 @@ class ParkingLot:
         >>> lot.display_status()
         - 강남주차장 (강남역 근처): 45 / 100 (45.0%)
     """
-    def __init__(self, name: str, total_spaces: int, location_info: str) -> None:
+    def __init__(self, name: str, total_spaces: int, location_info: str, parking_type: str = "무료", price_info: str = None) -> None:
         """
         ParkingLot 객체를 초기화합니다.
         
@@ -743,17 +911,26 @@ class ParkingLot:
             location_info: 주차장 위치 정보 (비어있지 않은 문자열)
                 - 예: "강남역 근처", "서초역 2번 출구"
                 - None, 빈 문자열, 또는 문자열이 아닌 타입은 허용되지 않음
+            parking_type: 주차장 유형 (기본값: "무료")
+                - "무료": 무료 주차장
+                - "유료": 유료 주차장
+            price_info: 가격 정보 (기본값: None)
+                - None: 유형에 따라 자동 설정
+                - "무료": "무료"로 설정
+                - "유료": "최초 30분 무료, 그후 30분당 500원"으로 설정
                 
         Raises:
             ValueError: 입력값이 유효하지 않은 경우
                 - name이 None, 빈 문자열, 또는 문자열이 아닌 경우
                 - total_spaces가 양의 정수가 아닌 경우
                 - location_info가 None, 빈 문자열, 또는 문자열이 아닌 경우
+                - parking_type이 "무료" 또는 "유료"가 아닌 경우
                 
         Example:
-            >>> lot = ParkingLot("강남주차장", 100, "강남역 근처")
+            >>> lot = ParkingLot("강남주차장", 100, "강남역 근처", "유료")
             >>> print(lot.name)  # "강남주차장"
             >>> print(lot.total_spaces)  # 100
+            >>> print(lot.parking_type)  # "유료"
             >>> print(lot.current_cars)  # 0 ~ 100 사이의 랜덤 값
         """
         # 입력값 유효성 검사: None, 빈 문자열, 잘못된 타입 체크
@@ -763,11 +940,24 @@ class ParkingLot:
             raise ValueError("총 주차 공간은 양의 정수여야 합니다")
         if not location_info or not isinstance(location_info, str):
             raise ValueError("위치 정보는 비어있지 않은 문자열이어야 합니다")
+        if parking_type not in ["무료", "유료"]:
+            raise ValueError("주차장 유형은 '무료' 또는 '유료'여야 합니다")
             
         # 주차장 기본 정보 저장
         self.name = name
         self.total_spaces = total_spaces
         self.location_info = location_info
+        self.parking_type = parking_type
+        
+        # 가격 정보 설정
+        if price_info is not None:
+            self.price_info = price_info
+        elif parking_type == "유료":
+            self.price_info = "최초 30분 무료, 그후 30분당 500원"
+        elif parking_type == "무료":
+            self.price_info = "무료"
+        else:
+            self.price_info = "가격 정보 없음"
         
         # 초기 주차 차량은 0대에서 총 공간 사이에서 임의로 설정
         # 실제 운영 환경에서는 센서나 데이터베이스에서 초기값을 가져올 수 있음
@@ -869,7 +1059,7 @@ class ParkingLot:
         해당 주차장의 현재 상태를 정해진 형식으로 출력합니다.
         
         주차장의 현재 상태를 사용자 친화적인 형태로 출력합니다.
-        점유율 정보를 포함하여 더 유용한 정보를 제공합니다.
+        점유율 정보와 주차장 유형을 포함하여 더 유용한 정보를 제공합니다.
         
         이 메서드는 견고한 오류 처리와 함께 사용자에게 명확한 정보를 제공합니다.
         
@@ -877,16 +1067,17 @@ class ParkingLot:
             None
             
         Output Format:
-            - 주차장명 (위치): 현재차량수 / 총공간수 (점유율%)
+            - 주차장명 (위치) [유형]: 현재차량수 / 총공간수 (점유율%)
             
         Example:
-            >>> lot = ParkingLot("강남주차장", 100, "강남역")
+            >>> lot = ParkingLot("강남주차장", 100, "강남역", "유료")
             >>> lot.current_cars = 45
             >>> lot.display_status()
-            - 강남주차장 (강남역): 45 / 100 (45.0%)
+            - 강남주차장 (강남역) [유료]: 45 / 100 (45.0%)
             
         Note:
             - 점유율은 소수점 첫째 자리까지 표시됩니다
+            - 주차장 유형이 대괄호 안에 표시됩니다
             - 0으로 나누기 오류를 방지하기 위해 안전한 계산을 수행합니다
             - 출력 실패 시에도 기본 메시지를 표시합니다
         """
@@ -895,18 +1086,18 @@ class ParkingLot:
             # total_spaces가 0인 경우를 대비한 안전한 계산
             occupancy_rate = (self.current_cars / self.total_spaces) * 100 if self.total_spaces > 0 else 0.0
             
-            # 상태 정보 출력 (점유율 포함)
-            # 사용자에게 직관적인 정보 제공 (현재/총 공간, 점유율)
-            print(f"  - {self.name} ({self.location_info}): {self.current_cars} / {self.total_spaces} ({occupancy_rate:.1f}%)")
+            # 상태 정보 출력 (점유율 및 주차장 유형 포함)
+            # 사용자에게 직관적인 정보 제공 (현재/총 공간, 점유율, 유형)
+            print(f"  - {self.name} ({self.location_info}) [{self.parking_type}]: {self.current_cars} / {self.total_spaces} ({occupancy_rate:.1f}%)")
             
             # 출력 완료 로깅 (디버그 레벨)
-            self.logger.debug(f"상태 출력 완료: {self.current_cars}/{self.total_spaces} ({occupancy_rate:.1f}%)")
+            self.logger.debug(f"상태 출력 완료: {self.current_cars}/{self.total_spaces} ({occupancy_rate:.1f}%) [{self.parking_type}]")
             
         except Exception as e:
             # 출력 실패 시 오류 로깅 및 기본 메시지 출력
             # 이렇게 하면 출력 오류가 발생해도 사용자에게 정보를 제공할 수 있음
             self.logger.error(f"상태 출력 실패: {e}")
-            print(f"  - {self.name} ({self.location_info}): 출력 오류")
+            print(f"  - {self.name} ({self.location_info}) [{self.parking_type}]: 출력 오류")
     
     def get_occupancy_rate(self) -> float:
         """
@@ -1124,3 +1315,25 @@ class ParkingLot:
         # 설정 완료 로깅 (변경 전후 값 포함)
         self.logger.info(f"차량 수 변경: {old_count} -> {count}")
         return True
+    
+    def simulate_parking_changes(self) -> None:
+        """
+        주차장 상태를 랜덤하게 시뮬레이션합니다.
+        
+        실제 운영 환경에서는 센서나 데이터베이스에서 실시간 데이터를 가져오지만,
+        시뮬레이션을 위해 랜덤하게 차량 수를 변경합니다.
+        """
+        import random
+        
+        # 현재 차량 수에서 ±5 범위로 랜덤하게 변경
+        change = random.randint(-5, 5)
+        new_count = self.current_cars + change
+        
+        # 범위 제한 (0 ~ total_spaces)
+        new_count = max(0, min(new_count, self.total_spaces))
+        
+        # 변경이 있을 때만 업데이트
+        if new_count != self.current_cars:
+            old_count = self.current_cars
+            self.current_cars = new_count
+            self.logger.info(f"주차장 '{self.name}' 시뮬레이션: {old_count} -> {new_count}")
