@@ -15,9 +15,12 @@ from typing import Optional
 # parking_classes.py 파일에서 우리가 만든 클래스들을 가져옵니다.
 from parking_classes import ParkingLot, Dong, ParkingManager
 
+# 공통 데이터 파일에서 주차장 데이터를 가져옵니다.
+from parking_data import get_dongs_data
+
 # ==================== 설정 ====================
 # 시뮬레이션 설정
-SIMULATION_CYCLES = 5  # 시뮬레이션 실행 횟수
+SIMULATION_CYCLES = 1  # 시뮬레이션 실행 횟수
 CYCLE_INTERVAL = 2     # 사이클 간격 (초)
 
 # 로깅 설정
@@ -84,20 +87,8 @@ def setup_parking_data(manager: ParkingManager) -> bool:
     try:
         logger.info("주차장 데이터 설정 시작")
         
-        # 1. 동 지역 추가 (주차장명, 총공간수, 상세주소)
-        dongs_data = [
-            ("조례동", [
-                ("호수공원 주차장", 60, "전남 순천시 조례동 1866, 호수공원 옆"),
-                ("호수공원 자율주차장1", 50, "전남 순천시 왕지2길 13-12, 호수공원 주차장 건너편"),
-                ("호수공원 자율주차장2", 10, "전남 순천시 왕지4길 13-10, 카페 드로잉 건너편"),
-                ("호수공원 자율주차장3", 30, "전남 순천시 왕지4길 14-8 1, 카페 소나무 옆")
-            ]),
-            ("석현동", [
-                ("공과대학 3호관 주차장", 35, "전남 순천시 중앙로 255, 공과대학 3호관"),
-                ("공과대학 2호관 주차장", 30, "전남 순천시 중앙로 255, 공과대학 2호관"),
-                ("공과대학 1호관 주차장", 45, "전남 순천시 중앙로 255, 공과대학 1호관")
-            ])
-        ]
+        # 공통 데이터 파일에서 주차장 데이터 가져오기
+        dongs_data = get_dongs_data()
         
         for dong_name, lots_data in dongs_data:
             # 동 추가
@@ -112,9 +103,9 @@ def setup_parking_data(manager: ParkingManager) -> bool:
                 return False
             
             # 주차장 추가
-            for lot_name, total_spaces, address in lots_data:
+            for lot_name, total_spaces, address, parking_type, price_info, charger_info in lots_data:
                 try:
-                    lot = ParkingLot(lot_name, total_spaces, address)
+                    lot = ParkingLot(lot_name, total_spaces, address, parking_type, price_info)
                     if not dong.add_lot(lot):
                         logger.error(f"주차장 '{lot_name}' 추가 실패")
                         return False
@@ -174,7 +165,8 @@ def show_menu() -> None:
     print("🚗 주차장 관리 시스템")
     print("="*40)
     print("1. 주차장 현황 확인")
-    print("2. 종료")
+    print("2. 유형별 주차장 조회")
+    print("3. 종료")
     print("="*40)
 
 def get_user_choice() -> str:
@@ -186,11 +178,11 @@ def get_user_choice() -> str:
     """
     while True:
         try:
-            choice = input("선택하세요 (1-2): ").strip()
-            if choice in ['1', '2']:
+            choice = input("선택하세요 (1-3): ").strip()
+            if choice in ['1', '2', '3']:
                 return choice
             else:
-                print("❌ 잘못된 선택입니다. 1-2 중에서 선택해주세요.")
+                print("❌ 잘못된 선택입니다. 1-3 중에서 선택해주세요.")
         except KeyboardInterrupt:
             print("\n👋 프로그램을 종료합니다.")
             sys.exit(0)
@@ -237,10 +229,17 @@ def check_parking_status(manager: ParkingManager) -> None:
                 occupancy_rate = lot.get_occupancy_rate()
                 available_spaces = lot.get_available_spaces()
                 
-                print(f"{i}. {lot_name}")
+                # 유형에 따른 시각적 구분
+                if lot.parking_type == "유료":
+                    print(f"{i}. 🔴 [유료] {lot_name}")
+                else:
+                    print(f"{i}. 🟢 [무료] {lot_name}")
+                
                 print(f"   📍 {lot.location_info}")
                 print(f"   🚗 {lot.current_cars}/{lot.total_spaces} ({occupancy_rate:.1%})")
                 print(f"   🆓 여유: {available_spaces}개")
+                print(f"   💰 유형: {lot.parking_type}")
+                print(f"   💵 가격: {lot.price_info}")
                 
                 # 간단한 시각적 표시
                 visual_bar = '█' * int(occupancy_rate * 15) + '░' * (15 - int(occupancy_rate * 15))
@@ -402,10 +401,17 @@ def select_parking_lot(dong: 'Dong') -> Optional['ParkingLot']:
             if lot:
                 occupancy_rate = lot.get_occupancy_rate()
                 available_spaces = lot.get_available_spaces()
-                print(f"{i}. {lot_name}")
+                # 유형에 따른 시각적 구분
+                if lot.parking_type == "유료":
+                    print(f"{i}. 🔴 [유료] {lot_name}")
+                else:
+                    print(f"{i}. 🟢 [무료] {lot_name}")
+                
                 print(f"   📍 주소: {lot.location_info}")
                 print(f"   🚗 현재: {lot.current_cars}/{lot.total_spaces} ({occupancy_rate:.1%})")
                 print(f"   🆓 여유: {available_spaces}개")
+                print(f"   💰 유형: {lot.parking_type}")
+                print(f"   💵 가격: {lot.price_info}")
                 print()
         
         # 사용자 선택 받기
@@ -453,6 +459,8 @@ def display_lot_status(lot: 'ParkingLot') -> None:
         print(f"📊 총 주차 공간: {lot.total_spaces}개")
         print(f"🚗 현재 주차된 차량: {lot.current_cars}대")
         print(f"🆓 사용 가능한 공간: {lot.get_available_spaces()}개")
+        print(f"💰 유형: {lot.parking_type}")
+        print(f"💵 가격: {lot.price_info}")
         
         # 점유율 정보
         occupancy_rate = lot.get_occupancy_rate()
@@ -475,6 +483,86 @@ def display_lot_status(lot: 'ParkingLot') -> None:
     except Exception as e:
         logger.error(f"주차장 상태 출력 실패: {e}")
         print(f"❌ 현황 출력 중 오류가 발생했습니다: {e}")
+
+# ==================== 유형별 주차장 조회 ====================
+def check_parking_by_type(manager: ParkingManager) -> None:
+    """
+    유형별 주차장 조회 기능
+    
+    사용자가 무료 또는 유료 주차장을 선택하여 해당 유형의 모든 주차장 현황을 확인할 수 있습니다.
+    """
+    logger = logging.getLogger(__name__)
+    
+    print("\n🔍 유형별 주차장 조회")
+    print("무료 또는 유료 주차장을 선택하여 현황을 확인할 수 있습니다.")
+    
+    try:
+        # 유형 선택
+        print("\n" + "="*30)
+        print("🏷️ 주차장 유형 선택")
+        print("="*30)
+        print("1. 무료 주차장")
+        print("2. 유료 주차장")
+        print("="*30)
+        
+        while True:
+            try:
+                type_choice = input("유형을 선택하세요 (1-2): ").strip()
+                if type_choice == '1':
+                    parking_type = "무료"
+                    break
+                elif type_choice == '2':
+                    parking_type = "유료"
+                    break
+                else:
+                    print("❌ 1-2 중에서 선택해주세요.")
+            except KeyboardInterrupt:
+                print("\n👋 조회를 취소합니다.")
+                return
+            except Exception as e:
+                print(f"❌ 입력 오류: {e}")
+        
+        # 해당 유형의 주차장 목록 조회
+        lots_by_type = manager.get_lots_by_type(parking_type)
+        
+        if not lots_by_type:
+            print(f"\n❌ '{parking_type}' 주차장이 등록되어 있지 않습니다.")
+            return
+        
+        # 결과 출력
+        print(f"\n" + "="*60)
+        print(f"🏷️ {parking_type} 주차장 현황")
+        print("="*60)
+        print(f"총 {len(lots_by_type)}개의 {parking_type} 주차장이 있습니다.")
+        print()
+        
+        for i, lot_info in enumerate(lots_by_type, 1):
+            occupancy_rate = lot_info['occupancy_rate']
+            available_spaces = lot_info['available_spaces']
+            
+            # 유형에 따른 시각적 구분
+            if lot_info['parking_type'] == "유료":
+                print(f"{i}. 🔴 [유료] {lot_info['lot_name']} ({lot_info['dong_name']})")
+            else:
+                print(f"{i}. 🟢 [무료] {lot_info['lot_name']} ({lot_info['dong_name']})")
+            
+            print(f"   📍 {lot_info['location']}")
+            print(f"   🚗 {lot_info['current_cars']}/{lot_info['total_spaces']} ({occupancy_rate:.1%})")
+            print(f"   🆓 여유: {available_spaces}개")
+            print(f"   💰 유형: {lot_info['parking_type']}")
+            print(f"   💵 가격: {lot_info.get('price_info', '가격 정보 없음')}")
+            
+            # 간단한 시각적 표시
+            visual_bar = '█' * int(occupancy_rate * 15) + '░' * (15 - int(occupancy_rate * 15))
+            print(f"   📊 {visual_bar} {occupancy_rate:.1%}")
+            print()
+        
+        print("="*60)
+        logger.info(f"'{parking_type}' 유형 주차장 현황 출력 완료")
+        
+    except Exception as e:
+        logger.error(f"유형별 주차장 조회 실행 중 오류 발생: {e}")
+        print(f"❌ 오류가 발생했습니다: {e}")
 
 
 # ==================== 메인 함수 ====================
@@ -505,6 +593,10 @@ def main() -> None:
                 check_parking_status(manager)
                 
             elif choice == '2':
+                # 유형별 주차장 조회
+                check_parking_by_type(manager)
+                
+            elif choice == '3':
                 # 종료
                 print("👋 주차장 관리 시스템을 종료합니다.")
                 logger.info("프로그램 종료")
